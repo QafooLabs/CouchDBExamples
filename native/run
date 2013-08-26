@@ -1,0 +1,160 @@
+#!/usr/bin/env php
+<?php
+
+// Connection default parameters
+$connectionDefaults = array(
+    'scheme'   => 'http',
+    'user'     => null,
+    'password' => null,
+    'host'     => 'localhost',
+    'port'     => 5984,
+);
+
+$target = parse_url(isset($argv[1]) ? $argv[1] : '/native');
+$target += $connectionDefaults;
+
+// Ensure target database is recreated
+try {
+    request($target, $target['path'], 'DELETE');
+} catch ( Exception $e ) {
+    // If it did not exis, we do not care
+}
+
+// 1) Create database
+requestSimple($target, $target['path'], 'PUT');
+
+// 2) Create a new tweet in the database
+request($target, $target['path'], 'POST', json_encode(array(
+    'type' => 'tweet',
+    'user' => 'kore',
+    'text' => 'Hello #world!',
+)));
+
+// 3) Update a document
+$result = json_decode(request($target, $target['path'], 'POST', json_encode(array(
+    'type' => 'tweet',
+    'user' => 'kore',
+    'text' => 'This is a second #tweet!',
+))));
+
+request(
+    $target,
+    $target['path'] . '/' . $result->id . '?rev=' . $result->rev,
+    'PUT',
+    json_encode(array(
+        'type' => 'tweet',
+        'user' => 'kore',
+        'text' => 'This is a second #updated #tweet!',
+    ))
+);
+
+// 4) Create a view
+request(
+    $target,
+    $target['path'] . '/_design/tweets',
+    'PUT',
+    json_encode(array(
+        '_id'      => '_design/tweets',
+        'language' => 'javascript',
+        'views'    => array(
+            'user' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/user/map.js'),
+            ),
+            'hashtags' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/hashtags/map.js'),
+                'reduce' => file_get_contents(__DIR__ . '/../views/hashtags/reduce.js'),
+            ),
+        )
+    ))
+);
+
+// 5) Request the view
+var_dump(
+    json_decode(request(
+        $target,
+        $target['path'] . '/_design/tweets/_view/hashtags?group=true'
+    ))->rows
+);
+
+/***
+ * Helper functions
+ */
+
+/**
+ * Execute a HTTP request
+ *
+ * Will throw an exception if the server responds with a status >= 400 or on
+ * connection failure.
+ *
+ * Returns the response body on success as a string.
+ *
+ * @param array $host
+ * @param string $path
+ * @param string $method
+ * @param mixed $data
+ * @return string
+ */
+function request(array $host, $path, $method = 'GET', $data = null)
+{
+    $httpFilePointer = @fopen(
+        $url = $host['scheme'] . '://' . $host['user'] . ':' . $host['password'] . '@' . $host['host']  . ':' . $host['port'] . $path,
+        'r',
+        false,
+        stream_context_create(
+            array(
+                'http' => array(
+                    'method'        => $method,
+                    'content'       => $data,
+                    'ignore_errors' => true,
+                    'header'        => 'Content-type: application/json',
+                ),
+            )
+        )
+    );
+
+    // Check if connection has been established successfully
+    if ($httpFilePointer === false) {
+        throw new Exception("Could not connect to server at $url: " . error_get_last()['message']);
+    }
+
+    $body = stream_get_contents($httpFilePointer);
+
+    $metaData   = stream_get_meta_data($httpFilePointer);
+    $rawHeaders = isset($metaData['wrapper_data']['headers']) ? $metaData['wrapper_data']['headers'] : $metaData['wrapper_data'];
+    $headers    = array();
+    foreach ($rawHeaders as $lineContent) {
+        // Extract header values
+        if (preg_match('(^HTTP/(?P<version>\d+\.\d+)\s+(?P<status>\d+))S', $lineContent, $match)) {
+            $headers['version'] = $match['version'];
+            $headers['status']  = (int) $match['status'];
+        } else {
+            list($key, $value) = explode(':', $lineContent, 2);
+            $headers[strtolower($key)] = ltrim($value);
+        }
+    }
+
+    if ($headers['status'] >= 400) {
+        throw new Exception("Server returned with error: " . $headers['status'] . " for URL $url\n\n" . $body);
+    }
+
+    return $body;
+}
+
+function requestSimple(array $host, $path, $method = 'GET', $data = null)
+{
+    return file_get_contents(
+        $host['scheme'] . '://' . $host['user'] . ':' . $host['password'] . '@' . $host['host']  . ':' . $host['port'] . $path,
+        false,
+        stream_context_create(
+            array(
+                'http' => array(
+                    'method'        => $method,
+                    'content'       => $data,
+                    'ignore_errors' => true,
+                    'header'        => 'Content-type: application/json',
+                ),
+            )
+        )
+    );
+}
+

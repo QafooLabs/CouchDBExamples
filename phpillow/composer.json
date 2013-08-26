@@ -1,0 +1,6 @@
+{
+    "name":         "PHPillow example",
+    "require":      {
+        "arbit/phpillow": "@stable"
+    }
+}

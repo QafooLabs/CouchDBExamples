@@ -1,0 +1,98 @@
+#!/usr/bin/env php
+<?php
+
+// Connection default parameters
+$connectionDefaults = array(
+    'scheme'   => 'http',
+    'user'     => null,
+    'password' => null,
+    'host'     => 'localhost',
+    'port'     => 5984,
+);
+
+$target = parse_url(isset($argv[1]) ? $argv[1] : '/phpillow');
+$target += $connectionDefaults;
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+phpillowConnection::createInstance($target['host'], $target['port'], $target['user'], $target['password']);
+
+$connection = phpillowConnection::getInstance();
+$connection->setDatabase($target['path']);
+
+try {
+    $connection->delete($target['path']);
+} catch (Exception $e) {
+    // If it did not exis, we do not care
+}
+
+// 1) Create database
+$connection->put($target['path']);
+
+// 2) Create a new tweet in the database
+class Tweet extends phpillowDocument
+{
+    protected $requiredProperties = array('user', 'text');
+
+    public function __construct()
+    {
+        $this->properties = array(
+            'user' => new phpillowStringValidator(),
+            'text' => new phpillowStringValidator(),
+        );
+
+        parent::__construct();
+    }
+
+    protected function generateId()
+    {
+        return null;
+    }
+
+    protected function getType()
+    {
+        return 'tweet';
+    }
+}
+
+$tweet = new Tweet();
+$tweet->user = "kore";
+$tweet->text = "Hello #world";
+$tweet->save();
+
+// 3) Update a document
+$tweet = new Tweet();
+$tweet->user = "kore";
+$tweet->text = "This is a second #tweet!";
+$tweet->save();
+
+$tweet->text = "This is a second #updated #tweet!";
+$tweet->save();
+
+// 4) Create a view
+class TweetView extends phpillowFileView
+{
+    public function __construct()
+    {
+        $this->viewFunctions = array(
+            'user' => array(
+                'map' => __DIR__ . '/../views/user/map.js',
+            ),
+            'hashtags' => array(
+                'map' => __DIR__ . '/../views/hashtags/map.js',
+                'reduce' => __DIR__ . '/../views/hashtags/reduce.js',
+            ),
+        );
+
+        parent::__construct();
+    }
+
+    protected function getViewName()
+    {
+        return 'tweets';
+    }
+}
+
+// 5) Request the view
+var_dump(TweetView::hashtags(array('group' => true))->rows);
+

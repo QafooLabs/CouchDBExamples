@@ -1,0 +1,77 @@
+#!/usr/bin/env php
+<?php
+
+// Connection default parameters
+$connectionDefaults = array(
+    'scheme'   => 'http',
+    'user'     => null,
+    'password' => null,
+    'host'     => 'localhost',
+    'port'     => 5984,
+);
+
+$target = parse_url(isset($argv[1]) ? $argv[1] : '/doctrine');
+$target += $connectionDefaults;
+
+$target['path'] = ltrim($target['path'], '/');
+
+$loader = require_once __DIR__ . '/vendor/autoload.php';
+\Doctrine\Common\Annotations\AnnotationRegistry::registerLoader(array($loader, 'loadClass'));
+
+$dbClient = new \Doctrine\CouchDB\CouchDBClient(
+    new \Doctrine\CouchDB\HTTP\SocketClient(),
+    $target['path']
+);
+
+$config = new \Doctrine\ODM\CouchDB\Configuration();
+
+$config->setMetadataDriverImpl(
+    $config->newDefaultAnnotationDriver(array(__DIR__ . '/documents'))
+);
+
+$documentManager = new \Doctrine\ODM\CouchDB\DocumentManager($dbClient, $config);
+
+// 1) Create database
+try {
+    $documentManager->getCouchDBClient()->deleteDatabase($target['path']);
+} catch (\Exception $e) {
+}
+$documentManager->getCouchDBClient()->createDatabase($target['path']);
+
+// 2) Create a new tweet in the database
+require_once __DIR__ . '/documents/Tweet.php';
+
+$tweet = new Tweet();
+$tweet->setUser("kore");
+$tweet->setText("Hello #world");
+
+$documentManager->persist($tweet);
+$documentManager->flush();
+
+// 3) Update a document
+$tweet = new Tweet();
+$tweet->setUser("kore");
+$tweet->setText("This is a second #tweet!");
+
+$documentManager->persist($tweet);
+$documentManager->flush();
+
+$tweet->setText("This is a second #updated #tweet!");
+
+$documentManager->persist($tweet);
+$documentManager->flush();
+
+// 4) Create a view
+$view = new \Doctrine\CouchDB\View\FolderDesignDocument(__DIR__ . '/../');
+$documentManager->getCouchDBClient()->createDesignDocument('tweets', $view);
+
+// 5) Request the view
+$config->addDesignDocument(
+    'tweets',
+    'Doctrine\CouchDB\View\FolderDesignDocument',
+    __DIR__ .  '/../'
+);
+
+$query = $documentManager->createQuery('tweets', 'hashtags');
+var_dump($query->setGroup(true)->execute()->toArray());
+

@@ -1,0 +1,7 @@
+{
+    "name":         "PHPillow example",
+    "require":      {
+        "doctrine/couchdb": "1.0.*@dev",
+        "doctrine/couchdb-odm": "dev-master"
+    }
+}

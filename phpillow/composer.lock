@@ -1,0 +1,52 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at http://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file"
+    ],
+    "hash": "1d58856b418ca09863bd6dc4f82585dd",
+    "packages": [
+        {
+            "name": "arbit/phpillow",
+            "version": "0.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Arbitracker/PHPillow.git",
+                "reference": "0.8.0"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Arbitracker/PHPillow/zipball/0.8.0",
+                "reference": "0.8.0",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "classmap": [
+                    "src/classes/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "LGPL-3.0+"
+            ],
+            "description": "PHPillow is an object orientated wrapper for CouchDB.",
+            "time": "2013-07-25 11:34:10"
+        }
+    ],
+    "packages-dev": [
+
+    ],
+    "aliases": [
+
+    ],
+    "minimum-stability": "stable",
+    "stability-flags": {
+        "arbit/phpillow": 0
+    },
+    "platform": [
+
+    ],
+    "platform-dev": [
+
+    ]
+}
