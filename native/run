@@ -23,46 +23,70 @@ try {
 // 1) Create database
 requestSimple($target, $target['path'], 'PUT');
 
-// 2) Create a new tweet in the database
-request($target, $target['path'], 'POST', json_encode(array(
-    'type' => 'tweet',
-    'user' => 'kore',
-    'text' => 'Hello #world!',
-)));
+// 2) Create some data in the database
+mt_srand(42);
+$users = array();
+foreach (array("kore", "hans", "egon") as $user) {
+    $users[] = json_decode(request($target, $target['path'] . '/user-' . $user, 'PUT', json_encode(array(
+        'type' => 'user',
+        'name' => $user,
+    ))));
+}
 
-// 3) Update a document
-$result = json_decode(request($target, $target['path'], 'POST', json_encode(array(
-    'type' => 'tweet',
-    'user' => 'kore',
-    'text' => 'This is a second #tweet!',
-))));
+$posts = array();
+foreach (range(1, 5) as $number) {
+    $posts[] = json_decode(request($target, $target['path'] . '/post-hello_world_' . $number, 'PUT', json_encode(array(
+        'type'  => 'post',
+        'user'  => $users[0]->id,
+        'title' => 'Hello world ' . $number,
+        'text'  => 'Hello #world! This is blog #post number ' . $number . '.',
+        'date'  => date("m d, Y H:i:s", mt_rand(10000000, 20000000)),
+    ))));
+}
 
-request(
-    $target,
-    $target['path'] . '/' . $result->id . '?rev=' . $result->rev,
-    'PUT',
-    json_encode(array(
-        'type' => 'tweet',
-        'user' => 'kore',
-        'text' => 'This is a second #updated #tweet!',
-    ))
-);
+foreach ($posts as $post) {
+    for ($i = 0; $i < mt_rand(2, 5); ++$i) {
+        $posts[] = json_decode(request($target, $target['path'], 'POST', json_encode(array(
+            'type'   => 'post_comment',
+            'user'   => $users[array_rand($users)]->id,
+            'post'   => $post->id,
+            'text'   => 'This is just a random comment',
+            'date'   => date("m d, Y H:i:s", mt_rand(10000000, 20000000)),
+            'rating' => mt_rand(0, 5),
+        ))));
+    }
+}
 
 // 4) Create a view
 request(
     $target,
-    $target['path'] . '/_design/tweets',
+    $target['path'] . '/_design/blog',
     'PUT',
     json_encode(array(
-        '_id'      => '_design/tweets',
+        '_id'      => '_design/blog',
         'language' => 'javascript',
         'views'    => array(
+            // List posts (including comment count)
+            'posts' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/posts/map.js'),
+            ),
+            // Per user, show: comments, posts
             'user' => array(
                 'map' => file_get_contents(__DIR__ . '/../views/user/map.js'),
             ),
-            'hashtags' => array(
-                'map' => file_get_contents(__DIR__ . '/../views/hashtags/map.js'),
-                'reduce' => file_get_contents(__DIR__ . '/../views/hashtags/reduce.js'),
+            // Show single post, including comments
+            'post' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/post/map.js'),
+            ),
+            // Show average comment count for all posts
+            'comments' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/comments/map.js'),
+                'reduce' => file_get_contents(__DIR__ . '/../views/comments/reduce.js'),
+            ),
+            // Time range aggregation for comments
+            'time_range' => array(
+                'map' => file_get_contents(__DIR__ . '/../views/time_range/map.js'),
+                'reduce' => file_get_contents(__DIR__ . '/../views/time_range/reduce.js'),
             ),
         )
     ))
@@ -72,7 +96,7 @@ request(
 var_dump(
     json_decode(request(
         $target,
-        $target['path'] . '/_design/tweets/_view/hashtags?group=true'
+        $target['path'] . '/_design/blog/_view/time_range?group=true&group_level=2'
     ))->rows
 );
 
